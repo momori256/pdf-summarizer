@@ -3,8 +3,8 @@ use ollama_rs::{
     generation::completion::{request::GenerationRequest, GenerationContext, GenerationResponse},
     Ollama,
 };
-use std::io::Write;
 use std::path::Path;
+use std::{io::Write, path::PathBuf};
 use tokio_stream::StreamExt;
 
 type AppResult = Result<(), Box<dyn std::error::Error>>;
@@ -96,6 +96,7 @@ async fn chat_internal<T: std::io::Read>(mut input: T) -> AppResult {
     let model = "orca-mini:latest".to_string();
     let mut out = std::io::stdout();
     let mut context = None;
+    let mut pdf: Option<String> = None;
 
     loop {
         out.write_all("> ".as_bytes())?;
@@ -104,13 +105,64 @@ async fn chat_internal<T: std::io::Read>(mut input: T) -> AppResult {
         let mut prompt = String::new();
         input.read_to_string(&mut prompt)?;
         let prompt = prompt.trim();
+
         if prompt == ":exit" {
             break;
         }
 
-        ask_stream(&ollama, &model, prompt, &mut context, &mut out).await?;
+        if prompt.starts_with(":use") {
+            match parse_use_command(prompt) {
+                Ok(content) => {
+                    pdf = Some(content);
+                    out.write_all("PDF was Successfully loaded. Now {pdf} will be replaced by the content of the PDF.\n".as_bytes())?;
+                    out.flush()?;
+                }
+                Err(e) => {
+                    out.write_all(format!("Failed to load PDF: {e:?}\n").as_bytes())?;
+                    out.flush()?;
+                }
+            };
+            continue;
+        }
+
+        let prompt = match substitue_pdf(prompt, &pdf) {
+            Ok(prompt) => prompt,
+            Err(e) => {
+                out.write_all(e.as_bytes())?;
+                out.flush()?;
+                continue;
+            }
+        };
+        ask_stream(&ollama, &model, &prompt, &mut context, &mut out).await?;
     }
     Ok(())
+}
+
+fn parse_use_command(prompt: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let (_, path) = prompt.split_once(' ').ok_or(":use <path>.")?;
+    let path = normalize_path(Path::new(path))?;
+    let content = pdf_extract::extract_text(path)?;
+    Ok(content)
+}
+
+fn substitue_pdf(prompt: &str, pdf: &Option<String>) -> Result<String, String> {
+    const PDF: &str = "{pdf}";
+    if !prompt.contains(PDF) {
+        return Ok(prompt.to_string());
+    }
+    match pdf {
+        Some(pdf) => Ok(prompt.replace(PDF, pdf)),
+        None => Err("Specify a PDF with ':use <path>'\n".to_string()),
+    }
+}
+
+fn normalize_path(path: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    if let Ok(path) = path.strip_prefix("~") {
+        let home = std::env::var("HOME")?;
+        let home = Path::new(&home);
+        return Ok(home.join(path));
+    }
+    Ok(path.to_path_buf())
 }
 
 #[cfg(test)]
@@ -149,5 +201,43 @@ mod tests {
         let input = Cursor::new(":exit");
         chat_internal(input).await?;
         Ok(())
+    }
+
+    #[test]
+    fn paser_use_command_can_parse_dummy_pdf() {
+        let prompt = ":use dummy.pdf";
+        let content = parse_use_command(prompt).unwrap();
+        assert_eq!("\n\nDummy PDF file", content);
+    }
+
+    #[test]
+    fn paser_use_command_fail_without_path() {
+        let prompt = ":use";
+        let result = parse_use_command(prompt);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn substitute_pdf_succeeds_with_pdf() {
+        let prompt = "Summarize the following text:\n{pdf}";
+        let pdf = Some("Dummy PDF file".to_string());
+        let result = substitue_pdf(prompt, &pdf).unwrap();
+        assert_eq!("Summarize the following text:\nDummy PDF file", result);
+    }
+
+    #[test]
+    fn substitute_pdf_fails_with_pdf() {
+        let prompt = "Summarize the following text:\n{pdf}";
+        let pdf = None;
+        let result = substitue_pdf(prompt, &pdf);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn normalize_path_expands_tilde() {
+        let path = Path::new("~/a/dummy.pdf");
+        let path = normalize_path(path);
+        let home = std::env::var("HOME").unwrap();
+        assert_eq!(Path::new(&format!("{home}/a/dummy.pdf")), path.unwrap());
     }
 }
