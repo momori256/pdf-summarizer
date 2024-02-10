@@ -13,6 +13,12 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build
         run: cargo build --verbose
+      - name: Install ollama
+        run: |
+          sudo apt-get update && sudo apt-get install curl
+          curl -fsSL https://ollama.com/install.sh | sh
+          ollama serve &
+          ollama pull tinyllama:latest
       - name: Run tests
         run: cargo test --verbose
 
@@ -45,5 +51,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Install ollama
+        run: |
+          sudo apt-get update && sudo apt-get install curl
+          curl -fsSL https://ollama.com/install.sh | sh
+          ollama serve &
+          ollama pull tinyllama:latest
       - name: Generate code coverage
         run: cargo install cargo-tarpaulin && cargo tarpaulin --verbose --workspace
