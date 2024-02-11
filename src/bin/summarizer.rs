@@ -1,4 +1,5 @@
 use ollama_rs::{generation::completion::request::GenerationRequest, Ollama};
+use tokio_stream::StreamExt;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -13,8 +14,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let prompt = format!("Summarize the following text from a PDF file:\n{pdf}");
 
     let request = GenerationRequest::new(model, prompt);
-    let response = ollama.generate(request).await?;
-    println!("{}", response.response);
+    let mut stream = ollama.generate_stream(request).await?;
+    while let Some(Ok(responses)) = stream.next().await {
+        for res in responses {
+            print!("{}", res.response);
+        }
+    }
+    println!();
 
     Ok(())
 }
