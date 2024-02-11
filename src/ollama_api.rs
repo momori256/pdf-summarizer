@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use chrono::Utc;
 use ollama_rs::{
     generation::completion::{request::GenerationRequest, GenerationContext, GenerationResponse},
@@ -7,7 +8,7 @@ use std::path::PathBuf;
 use std::{path::Path, pin::Pin};
 use tokio_stream::StreamExt;
 
-type AppResult = Result<(), Box<dyn std::error::Error>>;
+type AppResult = anyhow::Result<()>;
 
 async fn ask<T: std::io::Write>(
     ollama: &Ollama,
@@ -31,7 +32,7 @@ async fn ask<T: std::io::Write>(
             final_data: None,
         }
     } else {
-        ollama.generate(req).await?
+        ollama.generate(req).await.map_err(|e| anyhow!("{e:?}"))?
     };
     out.write_all(res.response.as_bytes())?;
     out.write_all(b"\n")?;
@@ -98,13 +99,13 @@ async fn ask_default(model: &str, prompt: &str) -> AppResult {
 }
 
 pub async fn summarize(pdf_path: &Path, model: &str) -> AppResult {
-    let pdf = pdf_extract::extract_text(pdf_path).unwrap();
+    let pdf = pdf_extract::extract_text(pdf_path)?;
     let prompt = format!("Summarize the following text that is from a PDF.\n{pdf}");
     ask_default(model, &prompt).await
 }
 
 pub async fn name(pdf_path: &Path, model: &str) -> AppResult {
-    let pdf = pdf_extract::extract_text(pdf_path).unwrap();
+    let pdf = pdf_extract::extract_text(pdf_path)?;
     let prompt =
         format!("The following text is from a PDF. Give it a suitable and concise title.\n{pdf}");
     ask_default(model, &prompt).await
@@ -154,7 +155,7 @@ async fn chat_internal<R: std::io::BufRead, W: std::io::Write>(
         let prompt = match substitue_pdf(prompt, &pdf) {
             Ok(prompt) => prompt,
             Err(e) => {
-                out.write_all(e.as_bytes())?;
+                out.write_all(format!("{e:?}").as_bytes())?;
                 out.flush()?;
                 continue;
             }
@@ -164,25 +165,28 @@ async fn chat_internal<R: std::io::BufRead, W: std::io::Write>(
     Ok(())
 }
 
-fn parse_use_command(prompt: &str) -> Result<String, Box<dyn std::error::Error>> {
-    let (_, path) = prompt.split_once(' ').ok_or(":use <path>.")?;
+fn parse_use_command(prompt: &str) -> anyhow::Result<String> {
+    let (_, path) = prompt
+        .split_once(' ')
+        .ok_or(":use <path>.")
+        .map_err(|e| anyhow!("{e:?}"))?;
     let path = normalize_path(Path::new(path))?;
     let content = pdf_extract::extract_text(path)?;
     Ok(content)
 }
 
-fn substitue_pdf(prompt: &str, pdf: &Option<String>) -> Result<String, String> {
+fn substitue_pdf(prompt: &str, pdf: &Option<String>) -> anyhow::Result<String> {
     const PDF: &str = "{pdf}";
     if !prompt.contains(PDF) {
         return Ok(prompt.to_string());
     }
     match pdf {
         Some(pdf) => Ok(prompt.replace(PDF, pdf)),
-        None => Err("Specify a PDF with ':use <path>'\n".to_string()),
+        None => Err(anyhow!("Specify a PDF with ':use <path>'\n".to_string())),
     }
 }
 
-fn normalize_path(path: &Path) -> Result<PathBuf, Box<dyn std::error::Error>> {
+fn normalize_path(path: &Path) -> Result<PathBuf, std::env::VarError> {
     if let Ok(path) = path.strip_prefix("~") {
         let home = std::env::var("HOME")?;
         let home = Path::new(&home);
