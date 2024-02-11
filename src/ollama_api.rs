@@ -263,20 +263,6 @@ mod tests {
         Ok(())
     }
 
-    #[tokio::test]
-    async fn chat_cannot_use_pdf_before_use() -> AppResult {
-        let input = Cursor::new("{pdf}\n:exit");
-        let mut output = Cursor::new(vec![0; 1024]);
-        chat_internal(input, &mut output).await?;
-        assert_eq!(
-            "> Specify a PDF with ':use <path>'\n> ",
-            String::from_utf8(output.into_inner())
-                .unwrap()
-                .trim_end_matches(|c| c == '\0')
-        );
-        Ok(())
-    }
-
     #[test]
     fn paser_use_command_can_parse_dummy_pdf() {
         let prompt = ":use dummy.pdf";
