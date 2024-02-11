@@ -1,4 +1,4 @@
-# pdf-summarizer ![workflow status](https://github.com/momori256/pdf-summarizer/actions/workflows/general.yml/badge.svg)
+# pdf-summarizer ![workflow status](https://github.com/momori256/pdf-summarizer/actions/workflows/general.yml/badge.svg) [![codecov](https://codecov.io/gh/momori256/pdf-summarizer/graph/badge.svg?token=SWGHMV2J2Q)](https://codecov.io/gh/momori256/pdf-summarizer)
 
 pdf-summarizer is a PDF summarization CLI app in Rust using [Ollama](https://ollama.com/), a tool similar to Docker for large language models (LLM).
 This app is designed to serve as a concise example to illustrate the way of leveraging Ollama's functionalities from Rust.
