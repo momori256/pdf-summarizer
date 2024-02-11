@@ -22,7 +22,7 @@ async fn ask<T: std::io::Write>(
         req = req.context(context.clone());
     }
 
-    let res = if cfg!(test) {
+    let res = if cfg!(test) || cfg!(feature = "integration_test") {
         // Use dummy response for test.
         GenerationResponse {
             model: req.model_name,
@@ -54,7 +54,7 @@ async fn ask_stream<T: std::io::Write>(
     if let Some(context) = context {
         req = req.context(context.clone());
     }
-    let mut stream = if cfg!(test) {
+    let mut stream = if cfg!(test) || cfg!(feature = "integration_test") {
         let stream = tokio_stream::iter(vec![Ok::<
             Vec<GenerationResponse>,
             ollama_rs::error::OllamaError,
