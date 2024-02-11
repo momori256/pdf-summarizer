@@ -5,6 +5,9 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+integration_test = []
+
 [dependencies]
 anyhow = "1.0.79"
 chrono = "0.4.33"
